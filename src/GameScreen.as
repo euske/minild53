@@ -126,12 +126,10 @@ public class GameScreen extends Screen
   public function setCenter(p:Point, hmargin:int, vmargin:int):void
   {
     // Center the window position.
-    if (_mapimage.width < _window.width) {
-      _window.x = -(_window.width-_mapimage.width)/2;
-    } else if (p.x-hmargin < _window.left) {
-      _window.x = Math.max(0, p.x-hmargin);
+    if (p.x-hmargin < _window.left) {
+      _window.x = p.x-hmargin;
     } else if (_window.right < p.x+hmargin) {
-      _window.x = Math.min(_mapimage.width, p.x+hmargin)-_window.width;
+      _window.x = p.x+hmargin-_window.width;
     }
     if (_map.height < _window.height) {
       _window.y = -(_window.height-_map.height)/2;
@@ -149,11 +147,12 @@ public class GameScreen extends Screen
     _map.setPixel(_player.pos.x % _map.width, 
 		  _player.pos.y % _map.height,
 		  WHIRL_COLOR);
-    setCenter(_player.pos, 4, 0);
     renderTiles(_window);
 
     _player.x = (_player.pos.x-_window.left) * TILE_SIZE;
     _player.y = (_player.pos.y-_window.top) * TILE_SIZE;
+    _player.pos.x += 1;
+    _window.x += 1;
     _ticks++;
   }
 
