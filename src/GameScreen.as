@@ -18,18 +18,17 @@ public class GameScreen extends Screen
 {
   private var _state:int;
   private var _ticks:int;
+  private var _guide:Guide;
   private var _player:Player;
   private var _status:Status;
 
   private var _map:BitmapData;
   private var _mapimage:BitmapData;
+  private var _world:Bitmap;
   private var _window:Rectangle;
 
   public const TILE_SIZE:int = 16;
   public const WHIRL_COLOR:int = 0xff0000;
-
-  private var _windowWidth:int;
-  private var _windowHeight:int;
 
   [Embed(source="../assets/world.png")]
   private static const WorldMapBitmapCls:Class;
@@ -42,23 +41,23 @@ public class GameScreen extends Screen
   {
     super(width, height, shared);
 
+    _map = worldMapBitmap.bitmapData.clone();
+
+    _window = new Rectangle(0, 0, width/TILE_SIZE, _map.height);
+
+    _mapimage = new BitmapData(_window.width*TILE_SIZE, _map.height*TILE_SIZE);
+    _world = new Bitmap(_mapimage);
+    _world.x = (width-_mapimage.width)/2;
+    _world.y = (height-_mapimage.height)/2;
+    addChild(_world);
+
+    _player = new Player(createSprite(0));
+    addChild(_player);
+
     _status = new Status();
     _status.x = (width-_status.width)/2;
     _status.y = (height-_status.height-8);
     addChild(_status);
-
-    _windowWidth = width / TILE_SIZE;
-    _windowHeight = (height-_status.height-16) / TILE_SIZE;
-
-    _window = new Rectangle(0, 0, _windowWidth, _windowHeight);
-
-    _map = worldMapBitmap.bitmapData.clone();
-    _mapimage = new BitmapData(_windowWidth*TILE_SIZE, 
-			       _windowHeight*TILE_SIZE);
-    addChild(new Bitmap(_mapimage));
-
-    _player = new Player(createSprite(0));
-    addChild(_player);
   }
 
   // open()
@@ -85,23 +84,24 @@ public class GameScreen extends Screen
   {
   }
 
+  // createSprite
   private function createSprite(i:int):Bitmap
   {
+    var src:Rectangle = new Rectangle(i*TILE_SIZE, 0, TILE_SIZE, TILE_SIZE);
     var data:BitmapData = new BitmapData(TILE_SIZE, TILE_SIZE);
-    data.copyPixels(spriteImages, 
-		    new Rectangle(i*TILE_SIZE, 0, TILE_SIZE, TILE_SIZE),
-		    new Point());
+    data.copyPixels(spriteImages, src, new Point());
     return new Bitmap(data);
   }
 
   // renderTiles
   private function renderTiles(r:Rectangle):void
   {
+    var w:int = _map.width;
+    var h:int = _map.height;
     for (var dy:int = 0; dy <= r.height; dy++) {
       for (var dx:int = 0; dx <= r.width; dx++) {
-	var c:uint = _map.getPixel((r.x+dx) % _map.width, 
-				   (r.y+dy) % _map.height);
-	var i:int = -1;
+	var c:uint = _map.getPixel((r.x+dx+w) % w, (r.y+dy+h) % h);
+	var i:int = 1;
 	switch (c) {
 	case 0x000000:
 	  i = 2;
@@ -109,34 +109,11 @@ public class GameScreen extends Screen
 	case WHIRL_COLOR:
 	  i = 3;
 	  break;
-	default:
-	  i = 1;
-	  break;
 	}
-	if (0 <= i) {
-	  var src:Rectangle = new Rectangle(i*TILE_SIZE, 0, TILE_SIZE, TILE_SIZE);
-	  var dst:Point = new Point(dx*TILE_SIZE, dy*TILE_SIZE);
-	  _mapimage.copyPixels(spriteImages, src, dst);
-	}
+	var src:Rectangle = new Rectangle(i*TILE_SIZE, 0, TILE_SIZE, TILE_SIZE);
+	var dst:Point = new Point(dx*TILE_SIZE, dy*TILE_SIZE);
+	_mapimage.copyPixels(spriteImages, src, dst);
       }
-    }
-  }
-
-  // setCenter(p)
-  public function setCenter(p:Point, hmargin:int, vmargin:int):void
-  {
-    // Center the window position.
-    if (p.x-hmargin < _window.left) {
-      _window.x = p.x-hmargin;
-    } else if (_window.right < p.x+hmargin) {
-      _window.x = p.x+hmargin-_window.width;
-    }
-    if (_map.height < _window.height) {
-      _window.y = -(_window.height-_map.height)/2;
-    } else if (p.y-vmargin < _window.top) {
-      _window.y = Math.max(0, p.y-vmargin);
-    } else if (_window.bottom < p.y+vmargin) {
-      _window.y = Math.min(_map.height, p.y+vmargin)-_window.height;
     }
   }
 
@@ -149,8 +126,8 @@ public class GameScreen extends Screen
 		  WHIRL_COLOR);
     renderTiles(_window);
 
-    _player.x = (_player.pos.x-_window.left) * TILE_SIZE;
-    _player.y = (_player.pos.y-_window.top) * TILE_SIZE;
+    _player.x = _world.x + (_player.pos.x-_window.left) * TILE_SIZE;
+    _player.y = _world.y + (_player.pos.y-_window.top) * TILE_SIZE;
     _player.pos.x += 1;
     _window.x += 1;
     _ticks++;
@@ -289,9 +266,6 @@ class Status extends Sprite
 class Guide extends Sprite
 {
   private var _text:Bitmap;
-  private var _sound:Sound;
-  private var _channel:SoundChannel;
-  private var _count:int;
 
   public function Guide(width:int, height:int, alpha:Number=0.2)
   {
@@ -314,34 +288,15 @@ class Guide extends Sprite
     }
   }
 
-  public function show(text:String=null, 
-		       sound:Sound=null, delay:int=30):void
+  public function show(text:String=null):void
   {
     this.text = text;
-    _sound = sound;
-    _count = delay;
     visible = true;
   }
 
   public function hide():void
   {
-    if (_channel != null) {
-      _channel.stop();
-      _channel = null;
-    }
     visible = false;
-  }
-
-  public function update():void
-  {
-    if (_count != 0) {
-      _count--;
-    } else {
-      if (_sound != null) {
-	_channel = _sound.play();
-	_sound = null;
-      }
-    }
   }
 }
 
