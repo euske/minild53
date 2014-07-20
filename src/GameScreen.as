@@ -11,6 +11,7 @@ import flash.ui.Keyboard;
 import flash.utils.getTimer;
 import baseui.Screen;
 import baseui.ScreenEvent;
+import baseui.SoundLoop;
 
 //  GameScreen
 //
@@ -22,6 +23,7 @@ public class GameScreen extends Screen
   private var _guide:Guide;
   private var _player:Player;
   private var _status:Status;
+  private var _music:SoundLoop;
 
   private var _map:BitmapData;
   private var _mapimage:BitmapData;
@@ -48,6 +50,10 @@ public class GameScreen extends Screen
   [Embed(source="../assets/sprites.png")]
   private static const SpriteImagesBitmapCls:Class;
   private static const spriteImages:BitmapData = new SpriteImagesBitmapCls().bitmapData;
+
+  [Embed(source="../assets/music.mp3")]
+  private static const MusicSoundCls:Class;
+  private static const musicSound:Sound = new MusicSoundCls();
 
   private static var pickupSound:SoundGenerator;
   private static var whirlSound:SoundGenerator;
@@ -83,8 +89,8 @@ public class GameScreen extends Screen
     addChild(_guide);
 
     pickupSound = new SoundGenerator();
-    pickupSound.setRectTone(function (t:Number):Number { return (t < 0.1)? 440:220; });
-    pickupSound.setDecayEnvelope(0.01, 0.2);
+    pickupSound.setRectTone(function (t:Number):Number { return (t < 0.05)? 440:220; });
+    pickupSound.setDecayEnvelope(0.0, 0.1);
 
     whirlSound = new SoundGenerator();
     whirlSound.setSawTone(function (t:Number):Number { return 1600-t*8000; });
@@ -95,6 +101,8 @@ public class GameScreen extends Screen
     crashSound.setDecayEnvelope(0.1, 0.9);
     
     defaultTransform = new SoundTransform(0.5);
+
+    _music = new SoundLoop(musicSound);
   }
 
   // open()
@@ -105,22 +113,26 @@ public class GameScreen extends Screen
     _guide.visible = true;
     _guide.text = "HISTORY REPEATS ITSELF\n\nPRESS KEY TO START";
     _state = 1;
+    _music.start();
     initGame();
   }
 
   // close()
   public override function close():void
   {
+    _music.stop();
   }
 
   // pause()
   public override function pause():void
   {
+    _music.pause();
   }
 
   // resume()
   public override function resume():void
   {
+    _music.resume();
   }
 
   // update()
@@ -288,7 +300,7 @@ public class GameScreen extends Screen
   // updateGame()
   private function updateGame(t:int):void
   {
-    var speed:int = 10;
+    var speed:int = Math.max(1, 10-Math.floor(_status.score*0.2));
     if (t % speed == 0) {
       _window.x += 1;
     }
