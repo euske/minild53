@@ -3,7 +3,6 @@ package {
 import flash.display.Bitmap;
 import flash.display.BitmapData;
 import flash.media.Sound;
-import flash.media.SoundTransform;
 import flash.geom.Point;
 import flash.geom.Rectangle;
 import flash.events.MouseEvent;
@@ -30,12 +29,16 @@ public class GameScreen extends Screen
   private var _queue:Vector.<Point>;
   private var _queue_push:int;
   private var _queue_pop:int;
+  private var _invul_count:int;
+  private var _start_time:int;
 
   public const TILE_SIZE:int = 16;
   public const QUEUE_SIZE:int = 1024;
+  public const INVUL_COUNT:int = 32;
   public const SEA_COLOR:int = 0xffffff;
   public const LAND_COLOR:int = 0x000000;
   public const WHIRL_COLOR:int = 0xff0000;
+  public const TARGET_COLOR:int = 0x00ff00;
 
   [Embed(source="../assets/world.png")]
   private static const WorldMapBitmapCls:Class;
@@ -199,19 +202,42 @@ public class GameScreen extends Screen
     }
   }
 
+  // getMap
+  private function getMap(x:int, y:int):uint
+  {
+    var w:int = _map.width;
+    var h:int = _map.height;
+    return _map.getPixel((x+w) % w, (y+h) % h);
+  }
+
+  // setMap
+  private function setMap(x:int, y:int, c:uint):void
+  {
+    var w:int = _map.width;
+    var h:int = _map.height;
+    _map.setPixel((x+w) % w, (y+h) % h, c);
+  }
+
   // initGame()
   private function initGame():void
   {
     trace("initGame");
-    _status.level = 1;
-    _status.miss = 0;
-    _status.time = 60;
-    _status.speed = 10;
+    _status.score = 0;
+    _status.life = 3;
+    _status.time = 0;
     _status.update();
+    _start_time = getTimer();
 
     _map = worldMapBitmap.bitmapData.clone();
+
     _player.pos = new Point(_map.width/2, _map.height/2);
+
     _window.x = _player.pos.x-_window.width/2;
+
+    for (var i:int = 0; i < 10; i++) {
+      placeTarget();
+    }
+
     updateGame(0);
   }
 
@@ -235,7 +261,8 @@ public class GameScreen extends Screen
   // updateGame()
   private function updateGame(t:int):void
   {
-    if (t % _status.speed == 0) {
+    var speed:int = 10;
+    if (t % speed == 0) {
       _window.x += 1;
     }
     
@@ -253,10 +280,24 @@ public class GameScreen extends Screen
       // CRUSHED!
       gameOver();
       return;
+    case WHIRL_COLOR:
+      if (_invul_count == 0) {
+	if (_status.life == 0) {
+	  gameOver();
+	  return;
+	}
+	_status.life--;
+	_invul_count = INVUL_COUNT;
+      }
+      break;
+    case TARGET_COLOR:
+      setMap(p.x, p.y, SEA_COLOR);
+      _status.score++;
+      break;
     }
 
     if (!_player.pos.equals(p)) {
-      _map.setPixel(p.x % _map.width, p.y % _map.height, WHIRL_COLOR);
+      setMap(_player.pos.x, _player.pos.y, WHIRL_COLOR);
       _queue[_queue_push] = p;
       _queue_push = (_queue_push+1) % _queue.length;
       clearWhirl(_queue_pop);
@@ -273,6 +314,13 @@ public class GameScreen extends Screen
     renderTiles(_window);
     _player.x = _world.x + (_player.pos.x-_window.left) * TILE_SIZE;
     _player.y = _world.y + (_player.pos.y-_window.top) * TILE_SIZE;
+    if (0 < _invul_count) {
+      _invul_count--;
+      _player.visible = (_invul_count == 0 || (Math.floor(_invul_count/4)%2 == 0));
+    }
+
+    _status.time = (getTimer()-_start_time)/1000;
+    _status.update();
   }
 
   // createSprite
@@ -298,6 +346,9 @@ public class GameScreen extends Screen
 	case WHIRL_COLOR:
 	  i = 3;
 	  break;
+	case TARGET_COLOR:
+	  i = 4;
+	  break;
 	}
 	var src:Rectangle = new Rectangle(i*TILE_SIZE, 0, TILE_SIZE, TILE_SIZE);
 	var dst:Point = new Point(dx*TILE_SIZE, dy*TILE_SIZE);
@@ -306,12 +357,17 @@ public class GameScreen extends Screen
     }
   }
 
-  // getMap
-  private function getMap(x:int, y:int):uint
+  // placeTarget
+  private function placeTarget():void
   {
-    var w:int = _map.width;
-    var h:int = _map.height;
-    return _map.getPixel((x+w) % w, (y+h) % h);
+    for (var i:int = 0; i < 10; i++) {
+      var x:int = Utils.rnd(_map.width);
+      var y:int = Utils.rnd(_map.height);
+      if (getMap(x, y) == SEA_COLOR) {
+	setMap(x,y, TARGET_COLOR);
+	break;
+      }
+    }
   }
 
   // clearWhirl
@@ -320,7 +376,7 @@ public class GameScreen extends Screen
     i = (i+_queue.length) % _queue.length;
     var p:Point = _queue[i];
     if (p != null) {
-      _map.setPixel(p.x % _map.width, p.y % _map.height, SEA_COLOR);
+      setMap(p.x, p.y, SEA_COLOR);
       _queue[i] = null;
     }
   }
@@ -333,8 +389,6 @@ import flash.display.Shape;
 import flash.display.Sprite;
 import flash.display.Bitmap;
 import flash.display.BitmapData;
-import flash.media.Sound;
-import flash.media.SoundChannel;
 import flash.geom.Rectangle;
 import flash.geom.Point;
 import baseui.Font;
@@ -344,24 +398,23 @@ import baseui.Font;
 // 
 class Status extends Sprite
 {
-  public var level:int;
-  public var miss:int;
+  public var score:int;
+  public var life:int;
   public var time:int;
-  public var speed:int;
 
   private var _text:Bitmap;
 
   public function Status()
   {
-    _text = Font.createText("LEVEL: 00   MISS: 00   TIME: 00", 0xffffff, 0, 2);
+    _text = Font.createText("SCORE: 000   LIFE: 00   TIME: 000", 0xffffff, 0, 2);
     addChild(_text);
   }
 
   public function update():void
   {
-    var text:String = "LEVEL: "+Utils.format(level,2);
-    text += "   MISS: "+Utils.format(miss,2);
-    text += "   TIME: "+Utils.format(time,2);
+    var text:String = "SCORE: "+Utils.format(score,3);
+    text += "   LIFE: "+Utils.format(life,2);
+    text += "   TIME: "+Utils.format(time,3);
     Font.renderText(_text.bitmapData, text);
   }
 }

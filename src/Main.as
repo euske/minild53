@@ -68,8 +68,6 @@ public class Main extends Sprite
 
     _pausescreen = new PauseScreen(stage.stageWidth, stage.stageHeight);
 
-    _shared = new SharedInfo();
-
     reset();
   }
 
