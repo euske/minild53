@@ -3,6 +3,7 @@ package {
 import flash.display.Bitmap;
 import flash.display.BitmapData;
 import flash.media.Sound;
+import flash.media.SoundTransform;
 import flash.geom.Point;
 import flash.geom.Rectangle;
 import flash.events.MouseEvent;
@@ -31,6 +32,7 @@ public class GameScreen extends Screen
   private var _queue_pop:int;
   private var _invul_count:int;
   private var _start_time:int;
+  private var _timeout:int;
 
   public const TILE_SIZE:int = 16;
   public const QUEUE_SIZE:int = 1024;
@@ -46,6 +48,11 @@ public class GameScreen extends Screen
   [Embed(source="../assets/sprites.png")]
   private static const SpriteImagesBitmapCls:Class;
   private static const spriteImages:BitmapData = new SpriteImagesBitmapCls().bitmapData;
+
+  private static var pickupSound:SoundGenerator;
+  private static var whirlSound:SoundGenerator;
+  private static var crashSound:SoundGenerator;
+  private static var defaultTransform:SoundTransform;
 
   public function GameScreen(width:int, height:int, shared:Object)
   {
@@ -74,6 +81,20 @@ public class GameScreen extends Screen
 
     _guide = new Guide();
     addChild(_guide);
+
+    pickupSound = new SoundGenerator();
+    pickupSound.setRectTone(function (t:Number):Number { return (t < 0.1)? 440:220; });
+    pickupSound.setDecayEnvelope(0.01, 0.2);
+
+    whirlSound = new SoundGenerator();
+    whirlSound.setSawTone(function (t:Number):Number { return 1600-t*8000; });
+    whirlSound.setCutoffEnvelope(0.1);
+
+    crashSound = new SoundGenerator();
+    crashSound.setNoise(function (t:Number):Number { return 400-t*300; });
+    crashSound.setDecayEnvelope(0.1, 0.9);
+    
+    defaultTransform = new SoundTransform(0.5);
   }
 
   // open()
@@ -124,8 +145,10 @@ public class GameScreen extends Screen
       keydownGame(keycode);
       break;
     case 3:
-      initGame();
-      startGame();
+      if (_timeout < getTimer()) {
+	initGame();
+	startGame();
+      }
       break;
     }
   }
@@ -230,6 +253,8 @@ public class GameScreen extends Screen
 
     _map = worldMapBitmap.bitmapData.clone();
 
+    _player.vx = 0;
+    _player.vy = 0;
     _player.pos = new Point(_map.width/2, _map.height/2);
 
     _window.x = _player.pos.x-_window.width/2;
@@ -253,7 +278,9 @@ public class GameScreen extends Screen
   private function gameOver():void
   {
     trace("gameOver");
+    crashSound.play(0, 0, defaultTransform);
     _state = 3;
+    _timeout = getTimer()+1000;
     _guide.visible = true;
     _guide.text = "GAME OVER\n\nPRESS KEY TO RESTART";
   }
@@ -286,12 +313,14 @@ public class GameScreen extends Screen
 	  gameOver();
 	  return;
 	}
+	whirlSound.play(0, 0, defaultTransform);
 	_status.life--;
 	_invul_count = INVUL_COUNT;
       }
       break;
     case TARGET_COLOR:
       setMap(p.x, p.y, SEA_COLOR);
+      pickupSound.play(0, 0, defaultTransform);
       _status.score++;
       break;
     }
