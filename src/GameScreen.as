@@ -18,6 +18,7 @@ public class GameScreen extends Screen
 {
   private var _state:int;
   private var _ticks:int;
+
   private var _guide:Guide;
   private var _player:Player;
   private var _status:Status;
@@ -47,14 +48,14 @@ public class GameScreen extends Screen
   {
     super(width, height, shared);
 
-    _map = worldMapBitmap.bitmapData.clone();
     _queue = new Vector.<Point>(QUEUE_SIZE);
     _queue_push = 0;
     _queue_pop = 1;
 
+    _map = worldMapBitmap.bitmapData.clone();
     _window = new Rectangle(0, 0, width/TILE_SIZE, _map.height);
-
     _mapimage = new BitmapData(_window.width*TILE_SIZE, _map.height*TILE_SIZE);
+
     _world = new Bitmap(_mapimage);
     _world.x = (width-_mapimage.width)/2;
     _world.y = (height-_mapimage.height)/2;
@@ -67,14 +68,19 @@ public class GameScreen extends Screen
     _status.x = (width-_status.width)/2;
     _status.y = (height-_status.height-8);
     addChild(_status);
+
+    _guide = new Guide();
+    addChild(_guide);
   }
 
   // open()
   public override function open():void
   {
-    _state = 0;
     _ticks = 0;
 
+    _guide.visible = true;
+    _guide.text = "HISTORY REPEATS ITSELF\n\nPRESS KEY TO START";
+    _state = 1;
     initGame();
   }
 
@@ -106,6 +112,33 @@ public class GameScreen extends Screen
 
   // keydown(keycode)
   public override function keydown(keycode:int):void
+  {
+    switch (_state) {
+    case 1:
+      startGame();
+      break;
+    case 2:
+      keydownGame(keycode);
+      break;
+    case 3:
+      initGame();
+      startGame();
+      break;
+    }
+  }
+
+  // keyup(keycode)
+  public override function keyup(keycode:int):void 
+  {
+    switch (_state) {
+    case 2:
+      keyupGame(keycode);
+      break;
+    }
+  }
+
+  // keydownGame(keycode)
+  private function keydownGame(keycode:int):void
   {
     switch (keycode) {
     case Keyboard.LEFT:
@@ -142,8 +175,8 @@ public class GameScreen extends Screen
     }
   }
 
-  // keyup(keycode)
-  public override function keyup(keycode:int):void 
+  // keyupGame(keycode)
+  private function keyupGame(keycode:int):void 
   {
     switch (keycode) {
     case Keyboard.LEFT:
@@ -176,11 +209,10 @@ public class GameScreen extends Screen
     _status.speed = 10;
     _status.update();
 
+    _map = worldMapBitmap.bitmapData.clone();
     _player.pos = new Point(_map.width/2, _map.height/2);
     _window.x = _player.pos.x-_window.width/2;
     updateGame(0);
-
-    _state = 1;
   }
 
   // startGame()
@@ -188,13 +220,16 @@ public class GameScreen extends Screen
   {
     trace("startGame");
     _state = 2;
+    _guide.visible = false;
   }
 
   // gameOver()
   private function gameOver():void
   {
     trace("gameOver");
-    _state = 0;
+    _state = 3;
+    _guide.visible = true;
+    _guide.text = "GAME OVER\n\nPRESS KEY TO RESTART";
   }
 
   // updateGame()
@@ -336,14 +371,10 @@ class Status extends Sprite
 // 
 class Guide extends Sprite
 {
-  private var _text:Bitmap;
+  public const MARGIN:int = 16;
+  public const ALPHA:Number = 0.7;
 
-  public function Guide(width:int, height:int, alpha:Number=0.2)
-  {
-    graphics.beginFill(0, alpha);
-    graphics.drawRect(0, 0, width, height);
-    graphics.endFill();
-  }
+  private var _text:Bitmap;
 
   public function set text(v:String):void
   {
@@ -353,23 +384,22 @@ class Guide extends Sprite
     }
     if (v != null) {
       _text = Font.createText(v, 0xffffff, 2, 2);
+      graphics.clear();
+      graphics.beginFill(0, ALPHA);
+      graphics.drawRect(0, 0, _text.width+MARGIN*2, _text.height+MARGIN*2);
+      graphics.endFill();
       _text.x = (width-_text.width)/2;
       _text.y = (height-_text.height)/2;
       addChild(_text);
+      
+      if (parent != null) {
+	this.x = (parent.width-this.width)/2;
+	this.y = (parent.height-this.height)/2;
+      }
     }
   }
-
-  public function show(text:String=null):void
-  {
-    this.text = text;
-    visible = true;
-  }
-
-  public function hide():void
-  {
-    visible = false;
-  }
 }
+
 
 //  Player
 // 
