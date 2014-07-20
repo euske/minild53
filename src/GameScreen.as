@@ -26,8 +26,14 @@ public class GameScreen extends Screen
   private var _mapimage:BitmapData;
   private var _world:Bitmap;
   private var _window:Rectangle;
+  private var _queue:Vector.<Point>;
+  private var _queue_push:int;
+  private var _queue_pop:int;
 
   public const TILE_SIZE:int = 16;
+  public const QUEUE_SIZE:int = 1024;
+  public const SEA_COLOR:int = 0xffffff;
+  public const LAND_COLOR:int = 0x000000;
   public const WHIRL_COLOR:int = 0xff0000;
 
   [Embed(source="../assets/world.png")]
@@ -42,6 +48,9 @@ public class GameScreen extends Screen
     super(width, height, shared);
 
     _map = worldMapBitmap.bitmapData.clone();
+    _queue = new Vector.<Point>(QUEUE_SIZE);
+    _queue_push = 0;
+    _queue_pop = 1;
 
     _window = new Rectangle(0, 0, width/TILE_SIZE, _map.height);
 
@@ -85,12 +94,12 @@ public class GameScreen extends Screen
   }
 
   // createSprite
-  private function createSprite(i:int):Bitmap
+  private function createSprite(i:int):BitmapData
   {
     var src:Rectangle = new Rectangle(i*TILE_SIZE, 0, TILE_SIZE, TILE_SIZE);
     var data:BitmapData = new BitmapData(TILE_SIZE, TILE_SIZE);
     data.copyPixels(spriteImages, src, new Point());
-    return new Bitmap(data);
+    return data;
   }
 
   // renderTiles
@@ -103,7 +112,7 @@ public class GameScreen extends Screen
 	var c:uint = _map.getPixel((r.x+dx+w) % w, (r.y+dy+h) % h);
 	var i:int = 1;
 	switch (c) {
-	case 0x000000:
+	case LAND_COLOR:
 	  i = 2;
 	  break;
 	case WHIRL_COLOR:
@@ -117,19 +126,45 @@ public class GameScreen extends Screen
     }
   }
 
+  private function clearWhirl(i:int):void
+  {
+    i = (i+_queue.length) % _queue.length;
+    var p:Point = _queue[i];
+    if (p != null) {
+      _map.setPixel(p.x % _map.width, p.y % _map.height, SEA_COLOR);
+      _queue[i] = null;
+    }
+  }
+
   // update()
   public override function update():void
   {
-    _player.update(_ticks);
-    _map.setPixel(_player.pos.x % _map.width, 
-		  _player.pos.y % _map.height,
-		  WHIRL_COLOR);
-    renderTiles(_window);
+    if (_ticks % _status.speed == 0) {
+      _window.x += 1;
+    }
+    {
+      var di:int = Utils.rnd(_queue.length);
+      di = Utils.rnd(di+1);
+      clearWhirl(_queue_push-di);
+    }
+    _player.pos.x += _player.vx;
+    _player.pos.y += _player.vy;
+    _player.pos.x = Utils.clamp(_window.left, _player.pos.x, _window.right-1);
+    _player.pos.y = Utils.clamp(_window.top, _player.pos.y, _window.bottom-1);
 
+    if (!_player.pos0.equals(_player.pos)) {
+      var p:Point = _player.pos.clone();
+      _map.setPixel(p.x % _map.width, p.y % _map.height, WHIRL_COLOR);
+      _queue[_queue_push] = p;
+      _queue_push = (_queue_push+1) % _queue.length;
+      clearWhirl(_queue_pop);
+      _queue_pop = (_queue_pop+1) % _queue.length;
+      _player.pos0 = _player.pos.clone();
+    }
+
+    renderTiles(_window);
     _player.x = _world.x + (_player.pos.x-_window.left) * TILE_SIZE;
     _player.y = _world.y + (_player.pos.y-_window.top) * TILE_SIZE;
-    _player.pos.x += 1;
-    _window.x += 1;
     _ticks++;
   }
 
@@ -140,6 +175,7 @@ public class GameScreen extends Screen
     _status.level = 1;
     _status.miss = 0;
     _status.time = 60;
+    _status.speed = 10;
     _status.update();
 
     _player.pos = new Point(0, 3);
@@ -228,6 +264,7 @@ public class GameScreen extends Screen
 import flash.display.Shape;
 import flash.display.Sprite;
 import flash.display.Bitmap;
+import flash.display.BitmapData;
 import flash.media.Sound;
 import flash.media.SoundChannel;
 import flash.geom.Rectangle;
@@ -242,6 +279,7 @@ class Status extends Sprite
   public var level:int;
   public var miss:int;
   public var time:int;
+  public var speed:int;
 
   private var _text:Bitmap;
 
@@ -302,36 +340,15 @@ class Guide extends Sprite
 
 //  Player
 // 
-class Player extends Sprite
+class Player extends Bitmap
 {
   public var vx:int;
   public var vy:int;
+  public var pos:Point = new Point();
+  public var pos0:Point = new Point();
 
-  private var _pos:Point;
-
-  public function Player(bitmap:Bitmap)
+  public function Player(bitmapData:BitmapData) 
   {
-    _pos = new Point();
-    addChild(bitmap);
-  }
-
-  public function get pos():Point
-  {
-    return _pos;
-  }
-  public function set pos(v:Point):void
-  {
-    _pos = v;
-  }
-
-  public function get rect():Rectangle
-  {
-    return new Rectangle(x, y, width, height);
-  }
-
-  public function update(t:int):void
-  {
-    _pos.x += vx;
-    _pos.y += vy;
+    super(bitmapData);
   }
 }
