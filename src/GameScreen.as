@@ -319,8 +319,9 @@ public class GameScreen extends Screen
       }
       break;
     case TARGET_COLOR:
-      setMap(p.x, p.y, SEA_COLOR);
       pickupSound.play(0, 0, defaultTransform);
+      setMap(p.x, p.y, SEA_COLOR);
+      placeTarget();
       _status.score++;
       break;
     }
