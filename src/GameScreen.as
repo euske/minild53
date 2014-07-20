@@ -93,108 +93,16 @@ public class GameScreen extends Screen
   {
   }
 
-  // createSprite
-  private function createSprite(i:int):BitmapData
-  {
-    var src:Rectangle = new Rectangle(i*TILE_SIZE, 0, TILE_SIZE, TILE_SIZE);
-    var data:BitmapData = new BitmapData(TILE_SIZE, TILE_SIZE);
-    data.copyPixels(spriteImages, src, new Point());
-    return data;
-  }
-
-  // renderTiles
-  private function renderTiles(r:Rectangle):void
-  {
-    var w:int = _map.width;
-    var h:int = _map.height;
-    for (var dy:int = 0; dy <= r.height; dy++) {
-      for (var dx:int = 0; dx <= r.width; dx++) {
-	var c:uint = _map.getPixel((r.x+dx+w) % w, (r.y+dy+h) % h);
-	var i:int = 1;
-	switch (c) {
-	case LAND_COLOR:
-	  i = 2;
-	  break;
-	case WHIRL_COLOR:
-	  i = 3;
-	  break;
-	}
-	var src:Rectangle = new Rectangle(i*TILE_SIZE, 0, TILE_SIZE, TILE_SIZE);
-	var dst:Point = new Point(dx*TILE_SIZE, dy*TILE_SIZE);
-	_mapimage.copyPixels(spriteImages, src, dst);
-      }
-    }
-  }
-
-  private function clearWhirl(i:int):void
-  {
-    i = (i+_queue.length) % _queue.length;
-    var p:Point = _queue[i];
-    if (p != null) {
-      _map.setPixel(p.x % _map.width, p.y % _map.height, SEA_COLOR);
-      _queue[i] = null;
-    }
-  }
-
   // update()
   public override function update():void
   {
-    if (_ticks % _status.speed == 0) {
-      _window.x += 1;
+    switch (_state) {
+    case 2:
+      updateGame(_ticks);
+      break;
     }
-    {
-      var di:int = Utils.rnd(_queue.length);
-      di = Utils.rnd(di+1);
-      clearWhirl(_queue_push-di);
-    }
-    _player.pos.x += _player.vx;
-    _player.pos.y += _player.vy;
-    _player.pos.x = Utils.clamp(_window.left, _player.pos.x, _window.right-1);
-    _player.pos.y = Utils.clamp(_window.top, _player.pos.y, _window.bottom-1);
-
-    if (!_player.pos0.equals(_player.pos)) {
-      var p:Point = _player.pos.clone();
-      _map.setPixel(p.x % _map.width, p.y % _map.height, WHIRL_COLOR);
-      _queue[_queue_push] = p;
-      _queue_push = (_queue_push+1) % _queue.length;
-      clearWhirl(_queue_pop);
-      _queue_pop = (_queue_pop+1) % _queue.length;
-      _player.pos0 = _player.pos.clone();
-    }
-
-    renderTiles(_window);
-    _player.x = _world.x + (_player.pos.x-_window.left) * TILE_SIZE;
-    _player.y = _world.y + (_player.pos.y-_window.top) * TILE_SIZE;
     _ticks++;
-  }
-
-  // initGame()
-  private function initGame():void
-  {
-    trace("initGame");
-    _status.level = 1;
-    _status.miss = 0;
-    _status.time = 60;
-    _status.speed = 10;
-    _status.update();
-
-    _player.pos = new Point(0, 3);
-
-    _state = 1;
-  }
-
-  // startGame()
-  private function startGame():void
-  {
-    _state = 2;
-  }
-
-  // gameOver()
-  private function gameOver():void
-  {
-    trace("gameOver");
-    _state = 0;
-  }
+  }    
 
   // keydown(keycode)
   public override function keydown(keycode:int):void
@@ -257,6 +165,131 @@ public class GameScreen extends Screen
       break;
     }
   }
+
+  // initGame()
+  private function initGame():void
+  {
+    trace("initGame");
+    _status.level = 1;
+    _status.miss = 0;
+    _status.time = 60;
+    _status.speed = 10;
+    _status.update();
+
+    _player.pos = new Point(_map.width/2, _map.height/2);
+    _window.x = _player.pos.x-_window.width/2;
+    updateGame(0);
+
+    _state = 1;
+  }
+
+  // startGame()
+  private function startGame():void
+  {
+    trace("startGame");
+    _state = 2;
+  }
+
+  // gameOver()
+  private function gameOver():void
+  {
+    trace("gameOver");
+    _state = 0;
+  }
+
+  // updateGame()
+  private function updateGame(t:int):void
+  {
+    if (t % _status.speed == 0) {
+      _window.x += 1;
+    }
+    
+    var p:Point = _player.pos.clone();
+    if (getMap(p.x+_player.vx, p.y+_player.vy) != LAND_COLOR) {
+      p.x += _player.vx;
+      p.y += _player.vy;
+    }
+    p.x = Utils.clamp(_window.left, p.x, _window.right-1);
+    p.y = Utils.clamp(_window.top, p.y, _window.bottom-1);
+
+    var c:uint = getMap(p.x, p.y);
+    switch (c) {
+    case LAND_COLOR:
+      // CRUSHED!
+      gameOver();
+      return;
+    }
+
+    if (!_player.pos.equals(p)) {
+      _map.setPixel(p.x % _map.width, p.y % _map.height, WHIRL_COLOR);
+      _queue[_queue_push] = p;
+      _queue_push = (_queue_push+1) % _queue.length;
+      clearWhirl(_queue_pop);
+      _queue_pop = (_queue_pop+1) % _queue.length;
+      _player.pos = p;
+    }
+
+    {
+      var di:int = Utils.rnd(_queue.length);
+      di = Utils.rnd(di+1);
+      clearWhirl(_queue_push-di);
+    }
+
+    renderTiles(_window);
+    _player.x = _world.x + (_player.pos.x-_window.left) * TILE_SIZE;
+    _player.y = _world.y + (_player.pos.y-_window.top) * TILE_SIZE;
+  }
+
+  // createSprite
+  private function createSprite(i:int):BitmapData
+  {
+    var src:Rectangle = new Rectangle(i*TILE_SIZE, 0, TILE_SIZE, TILE_SIZE);
+    var data:BitmapData = new BitmapData(TILE_SIZE, TILE_SIZE);
+    data.copyPixels(spriteImages, src, new Point());
+    return data;
+  }
+
+  // renderTiles
+  private function renderTiles(r:Rectangle):void
+  {
+    for (var dy:int = 0; dy <= r.height; dy++) {
+      for (var dx:int = 0; dx <= r.width; dx++) {
+	var c:uint = getMap(r.x+dx, r.y+dy);
+	var i:int = 1;
+	switch (c) {
+	case LAND_COLOR:
+	  i = 2;
+	  break;
+	case WHIRL_COLOR:
+	  i = 3;
+	  break;
+	}
+	var src:Rectangle = new Rectangle(i*TILE_SIZE, 0, TILE_SIZE, TILE_SIZE);
+	var dst:Point = new Point(dx*TILE_SIZE, dy*TILE_SIZE);
+	_mapimage.copyPixels(spriteImages, src, dst);
+      }
+    }
+  }
+
+  // getMap
+  private function getMap(x:int, y:int):uint
+  {
+    var w:int = _map.width;
+    var h:int = _map.height;
+    return _map.getPixel((x+w) % w, (y+h) % h);
+  }
+
+  // clearWhirl
+  private function clearWhirl(i:int):void
+  {
+    i = (i+_queue.length) % _queue.length;
+    var p:Point = _queue[i];
+    if (p != null) {
+      _map.setPixel(p.x % _map.width, p.y % _map.height, SEA_COLOR);
+      _queue[i] = null;
+    }
+  }
+
 }
 
 } // package
@@ -345,7 +378,6 @@ class Player extends Bitmap
   public var vx:int;
   public var vy:int;
   public var pos:Point = new Point();
-  public var pos0:Point = new Point();
 
   public function Player(bitmapData:BitmapData) 
   {
